@@ -1,0 +1,461 @@
+---
+title: "IMDB Data Analysis"
+author: Qingsong Wang
+date: April 8th, 2019
+output: 
+  ioslides_presentation:
+    widescreen: true
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.width=6, fig.height=3) 
+options(digits = 3)
+```
+# Where Do We Start?
+
+## Background
+- **Movies**, also known as films, are a type of visual communication which uses moving pictures and sound to tell stories or teach people something. 
+- Movies are appealing a rapidly-increasing number of audience.
+- The questions that I'm interested in are listed delow:
+  * Which factors are of importance in making the movies popular, and how to predict the audience rating.
+  * How to determine whether the investment on a movie is profiable or not.
+  * How to build a recommender system for the movie audience.
+  * etc
+  
+## Data Description
+- The two datasets comes from [Kaggle](https://www.kaggle.com/), and we combine them.
+- The combined dataset contains nearly $5000$ movies, and after removing NA rows $3636$ pieces are left
+- The variables are listed on the next page
+
+## Data Description
+```{r, include=FALSE}
+library(dplyr)
+library(readr)
+library(wordcloud)
+library(jsonlite)
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+library(lubridate)
+library(gridExtra)
+library(GGally)
+library(network)
+library(formattable)
+library(DT)
+library(RColorBrewer)
+library(ggcorrplot)
+library(randomForest)
+library(e1071)
+library(rpart)
+movie = read_csv('movie.csv')
+```
+```{r}
+colnames(movie)
+```
+## Data Description
+- We explain some variables here:
+  - aspect_ratio: the aspect ratio of a movie
+  - actor_x_name / actor_x_facbook_likes: name and facebook like number of the actor
+  - facenumber_in_poster: Contains number of actor¡¯s faces on a movie poster
+  - gross: the revenue of a movie in USD
+  - genres: the sub-genres to which a movie belongs
+  - imdb_score: the audience rating of a movie
+  - movie_title: title of a movie
+  - title_year: the year in which a film was released
+  
+## Data Description
+- Considering inflation, it's more reasonable to measure the revenue of a movie by a ratio, i.e. the return rate,
+$$
+\text{return_rate} = \frac{\text{gross} - \text{budget}}{\text{budget}}
+$$
+- We regard the **imdb_score** and **return_rate** as the response respectively and apply several machine learning techniques to predict. 
+- Whether a movie is profitable or not can also be treated as a $0-1$ classification problem, so classifiction tools can be helpful.
+
+# What Do We Want?
+
+## Goal of Our Analysis
+There are mainly three goals as listed below.
+
+- Obtain a comprehensive knowledge of the dataset.
+- Build a model to predict the IMDB score of a movie based on several variables.
+- Build a model to determine whether a movie is profitable, or in other words, worth investing.
+
+# How Do We Begin? 
+```{r, include=FALSE}
+f1 = list(
+  family = "Old Standard TT, serif",
+  size = 14,
+  color = "grey"
+)
+f2 = list(
+  family = "Old Standard TT, serif",
+  size = 10,
+  color = "black"
+)
+a = list(
+  titlefont = f1,
+  showticklabels = T,
+  tickangle = -45,
+  tickfont = f2
+)
+
+m = list(
+  l = 50,
+  r = 50,
+  b = 100,
+  t = 100,
+  pad = 4
+)
+
+# annotations for subplot
+a1 = list(x = 0.5, y = 1.0,
+           showarrow = FALSE, 
+           text = "Distribution of bugdet", 
+           xanchor = "center", 
+           xref = "paper", 
+           yanchor = "bottom", 
+           yref = "paper", 
+           font = f1)
+
+b1 = list(x = 0.5, y = 1.0, 
+           showarrow = FALSE, 
+           text = "Distribution of gross", 
+           xanchor = "center", 
+           xref = "paper", 
+           yanchor = "bottom", 
+           yref = "paper",
+           font = f1)
+
+
+# creating a function called scatter_plot for
+# plotting scatter plots using ggplot and plotly
+
+scatter_plot = function(x, y, xlabel, ylabel, title,
+                         text1, text2, text3,
+                         alpha = NULL){
+  if(is.null(alpha)) alpha = 0.4
+  gp = ggplot(data = movie, mapping = aes(x = x, y = y,
+                                           text = paste(text1, x,
+                                                        text2, y,
+                                                        text3, movie_title)))
+  plot = gp + geom_point(position = "jitter", 
+                          show.legend = F, shape = 21, 
+                          stroke = .2, alpha = alpha) + 
+    xlab(xlabel) +
+    ylab(ylabel) +
+    ggtitle(title) +
+    theme_minimal() +
+    theme(legend.position = "none",
+          plot.title = element_text(size = 12, face = "bold", 
+                                    family = "Times", 
+                                    color = "darkgrey")) 
+  
+  ggplotly(plot, tooltip = "text") %>%
+    layout(m, xaxis = a, yaxis = a)
+}
+
+# creating function for plotting scatter plot using facet wrap
+facet_plot = function(x, y, xlabel, ylabel, alpha = NULL){
+  if(is.null(alpha)) alpha = 1
+  
+  fp = ggplot(data = movie, mapping = aes(x = x, y = y))
+  fp + geom_point(aes(fill = genres), position = "jitter", 
+                  show.legend = F, shape = 21,
+                  stroke = 0.2, alpha = alpha) +
+    xlab(xlabel) +
+    ylab(ylabel) +
+    facet_wrap(~genres, scales = "free") +
+    theme_minimal()
+}
+
+# creating a function for plotting a simple histogram
+hist_plot = function(x, xlabel, bwidth, fill = NULL, color = NULL){
+  if(is.null(fill)) fill = "orange"
+  if(is.null(color)) color = "black"
+  hp = ggplot(data = movie, mapping = aes(x = x))
+  gp = hp + geom_histogram(binwidth = bwidth, fill = fill, 
+                            color = color, 
+                            size = 0.2,
+                            alpha = 0.7,
+                            show.legend = F) +
+    xlab(xlabel) +
+    theme_minimal()
+  
+  ggplotly(gp) %>%
+    layout(margin = m, xaxis = a, yaxis = a)
+}
+
+# creating a function for plotting histogram using facet wrap
+facet_hist_plot = function(x, xlabel, bwidth){
+  
+  hp = ggplot(data = movie, mapping = aes(x = x))
+  hp + geom_histogram(aes(fill = genres), binwidth = bwidth,
+                      show.legend = F, 
+                      color = "black", size = 0.2, 
+                      alpha = 0.8) +
+    xlab(xlabel) +
+    theme_minimal() +
+    theme(legend.position = "none",
+          axis.text = element_text(size = 12, angle = 20),
+          axis.title = element_text(size = 14, 
+                                    family = "Times", 
+                                    color = "darkgrey",
+                                    face = "bold")) + 
+    facet_wrap(~ genres, scales = "free_y", ncol = 4)    
+}
+
+
+# creating function for plotting histograms for budget and gross
+budg_gross_hist = function(x){
+  
+  bh = ggplot(movie, aes(x = x))
+  bh + geom_histogram(binwidth = 0.05, 
+                      fill = sample(brewer.pal(11, "Spectral"), 1),
+                      color = "black", 
+                      size = 0.09,
+                      alpha = 0.7) + 
+    scale_x_log10() + 
+    theme_minimal()
+  
+  ggplotly() %>% 
+    layout(m, xaxis = a, yaxis = a) 
+}
+
+
+# creating a function for ploting bar graphs
+bar_plot = function(data, x, y, info, xlabl, ylabl, title, 
+                     deci = NULL, suf = NULL){
+  if(is.null(suf)) suf = ""
+  if(is.null(deci)) deci = 0
+  b1 = ggplot(data, aes(x = reorder(genres, x), 
+                         y = y, 
+                         text = paste("Genre:", genres,
+                                      info, 
+                                      round(y, deci), suf)))
+  
+  b1 + geom_bar(aes(fill = genres), stat = "identity", 
+                show.legend = F, color = "black", size = 0.2,
+                width = 0.7, alpha = 0.7) +
+    xlab(xlabl) +
+    ylab(ylabl) +
+    ggtitle(title) +
+    theme_minimal() +
+    theme(legend.position = "none",
+          plot.title = element_text(size = 14, 
+                                    color = "grey", family = "Times")) +
+    scale_fill_brewer(palette = "Spectral")
+  
+  ggplotly(tooltip = "text") %>%
+    layout(margin = m, xaxis = a, yaxis = a)
+}
+
+
+# creating a function for plotting plotly line graph for title_year
+line_graph = function(data, y, name){
+  
+  scat_p1 = plot_ly(data, x = ~title_year, y = ~ y, 
+                     name = name, type = 'scatter', mode = 'lines',
+                     line = list(color = sample(brewer.pal(11, "Spectral"), 1))) %>%
+    layout(xaxis = list(title = "Title Year", zeroline = F,
+                        showline = F, 
+                        showticklabels = T),
+           yaxis = list(title = "Average Score"),
+           title = "Line Graph for Avg Score/Avg Votes/Avg User Review by Title Year", 
+           font = list(family = "Serif", color = "grey"),
+           legend = list(orientation = "h", size = 6,
+                         bgcolor = "#E2E2E2",
+                         bordercolor = "darkgrey",
+                         borderwidth = 1),
+           margin = m)
+  scat_p1
+}
+colors = c(brewer.pal(n = 11, name = "Spectral"))
+```
+
+## Exploratory Data Analysis 
+- Display the proportion of movies making profit or loss. 
+```{r}
+movie %>%
+  group_by(if_profit) %>%
+  summarise(count = n()) %>% 
+  plot_ly(labels = ~factor(if_profit), values = ~count,
+          insidetextfont = list(color = 'Black'),
+          marker = list(colors = sample(brewer.pal(11, "Spectral")), 
+                        line = list(color = 'Black', width = .5)), 
+          opacity = 0.8) %>%
+  add_pie(hole = 0.6) %>%
+  layout(title = "Share of movies making profit or loss", 
+         titlefont = list(family = "Times", size = 20, color = "grey"),
+         xaxis = list(showgrid = T, zeroline = F, showticklabels = F),
+         yaxis = list(showgrid = T, zeroline = F, showticklabels = F),
+         showlegend = F, 
+         margin = list(t = 50, b = 50))
+```
+- The number of profitable movies is a bit larger, but we can still say that the dataset is balanced.
+
+## Exploratory Data Analysis
+- Check the distribution of **imdb_score**.
+```{r}
+hist_plot(movie$imdb_score, bwidth = 0.1, 
+          "IMDB Score", 
+          fill = sample(brewer.pal(11, "Spectral"), 1),
+          color = "black") 
+```
+- There exists right-skewness in the distribution of the IMDB score, most of which lie around $6.7$. We might take $\log$ transformation to handle this problem.
+
+## Exploratory Data Analysis
+- Check the distribution of **budget** and **gross**, with the values outside their respective inter quartile ranges removed.
+```{r}
+options(scipen = 999)  
+# transformed budget histograms
+p1 = budg_gross_hist(movie$budget) %>% 
+  layout(annotations = a1)
+
+# transformed gross histograms
+p2 = budg_gross_hist(movie$gross) %>%
+  layout(annotations = b1) 
+
+subplot(p1, p2, widths = c(0.5, 0.5))
+```
+- Similar to **imdb_score**, right-skewness exist and $\log$ transformation may still help.
+
+## Exploratory Data Analysis
+- Check if profitable movies recieve more appreciation by the users. Note that $1$ represents profitable movies and $0$ the others. 
+```{r}
+prof_loss = movie %>%
+  ggplot(aes(x = imdb_score, color = factor(if_profit))) +
+  geom_freqpoly(bins = 30) +
+  scale_color_manual(values = c(sample(brewer.pal(11, "Spectral"))),
+                     labels = c("Loss", "Profit")) +
+  xlab("IMDB Score") +
+  theme_minimal()
+
+ggplotly(prof_loss) %>%
+  layout(margin = list(t = 50, b = 100), xaxis = a, yaxis = a, 
+         legend = list(orientation = "h", size = 4,
+                       bgcolor = "#E2E2E2",
+                       bordercolor = "darkgrey",
+                       borderwidth = 1,
+                       x = 0,
+                       y = -0.1))
+```
+- Obviously, profitable movies gain higher IMDB score in general. A t-test provides more evidence but we're not going to show here.
+
+## Exploratory Data Analysis
+- Out of curiosity, we want to check if **imdb_score** is related to **release year**.
+```{r}
+movie$before_n_after_2000 = ifelse(movie$title_year >= 2000, 1, 0)
+
+# plotting a histogram separated by before_n_after_2000
+his = movie %>%
+  ggplot(aes(x = imdb_score, fill = factor(before_n_after_2000))) +
+  geom_histogram(binwidth = 0.1, 
+                 color = "black",
+                 position = "dodge",
+                 size = 0.2,
+                 alpha = 0.7) +
+  xlab("IMDB Score") +
+  ggtitle("Distribution of scores before and after year 2000") +
+  scale_fill_manual(values = c(sample(brewer.pal(11, "Spectral")))) +
+  theme_minimal() + 
+  theme(plot.title = element_text(size = 14,
+                                  colour = "darkgrey",
+                                  family = "Times"))
+
+
+ggplotly(his) %>%
+  layout(margin = list(t = 50, b = 100), 
+         xaxis = a, yaxis = a, 
+         legend = list(orientation = "h", size = 4,
+                       bgcolor = "#E2E2E2",
+                       bordercolor = "darkgrey",
+                       borderwidth = 1,
+                       x = 0,
+                       y = -0.1)) 
+```
+- We set year 2000 as a boundary and find that there's almost no difference in the distribution of **imdb_score** before and after that year.
+
+## Exploratory Data Analysis
+- Check the correlation between several variables
+```{r}
+ggpairs(movie %>% 
+                   select(imdb_score, total_fb_likes, gross, num_voted_users))
+```
+- This step helps us pick up the most significant variables, which can be used in regression analysis.
+
+## Exploratory Data Analysis
+
+
+# Which Models Can Help?
+
+## Split the Dataset
+Notice that if we try to decide whether to invest a movie or not, some variables cannot be obtained in advance, such as **num_user_for_reviews**, **num_voted_users**, etc. Besides, some text varaibles have no contribution. So, we simply drop them in our analysis.
+```{r}
+idx = c('actor_1_facebook_likes', 'actor_2_facebook_likes', 'actor_3_facebook_likes',
+        'director_facebook_likes', 'cast_total_facebook_likes', 'aspect_ratio', 'budget',
+        'color', 'facenumber_in_poster', 'imdb_score', 'runtime', 'return_rate', 'if_profit')
+movie = movie[, idx]
+movie[, 'color'] = as.factor(as.data.frame(movie[, 'color']))
+```
+As usual, we first split the dataset into training set and testing set.
+```{r, echo = TRUE}
+train_num = ceiling(0.8 * nrow(movie))
+test_num = nrow(movie) - train_num
+train_id = sample(1:nrow(movie), train_num)
+train = movie[train_id, ]
+test = movie[-train_id, ]
+```
+
+
+## Linear Regression
+```{r}
+lfit = lm(imdb_score ~ ., train[,1:12])
+pred_score = predict(lfit, test)
+print(paste('For IMDB score, RMSE is', 1 / test_num * sqrt(sum((pred_score - test$imdb_score)^2))))
+lfit2 = lm(return_rate ~ budget + runtime + total_fb_likes + facenumber_in_poster + 
+            num_critic_for_reviews + num_user_for_reviews + num_voted_users + aspect_ratio, train)
+pred_rate = predict(lfit2, test)
+print(paste('For return rate, RMSE is', 1 / test_num * sqrt(sum((pred_rate - test$return_rate)^2))))
+```
+## Linear Regression
+```{r}
+summary(lfit)
+```
+## Support Vector Machine
+```{r}
+svmfit = svm(imdb_score ~ budget + runtime + total_fb_likes + facenumber_in_poster + 
+               num_critic_for_reviews + num_user_for_reviews + num_voted_users + title_year + aspect_ratio, train)
+pred_score = predict(svmfit, test)
+print(paste('For IMDB score, RMSE is', 1 / test_num * sqrt(sum((pred_score - test$imdb_score)^2))))
+svmfit = svm(return_rate ~ budget + runtime + total_fb_likes + facenumber_in_poster + 
+            num_critic_for_reviews + num_user_for_reviews + num_voted_users + aspect_ratio, train)
+pred_rate = predict(svmfit, test)
+print(paste('For return rate, RMSE is', 1 / test_num * sqrt(sum((pred_rate - test$return_rate)^2))))
+```
+
+## Random Forest
+```{r}
+rffit = randomForest(imdb_score ~ budget + runtime + total_fb_likes + facenumber_in_poster + 
+               num_critic_for_reviews + num_user_for_reviews + num_voted_users + title_year, train)
+pred_score = predict(rffit, test)
+print(paste('For IMDB score, RMSE is', 1 / test_num * sqrt(sum((pred_score - test$imdb_score)^2))))
+rffit = randomForest(return_rate ~ budget + runtime + total_fb_likes + facenumber_in_poster + 
+            num_critic_for_reviews + num_user_for_reviews + num_voted_users, train)
+pred_rate = predict(rffit, test)
+print(paste('For return rate, RMSE is', 1 / test_num * sqrt(sum((pred_rate - test$return_rate)^2))))
+```
+
+## Logistic Regression
+```{r}
+logfit = glm(if_profit ~ budget + runtime + total_fb_likes + facenumber_in_poster + 
+               num_critic_for_reviews + num_user_for_reviews + num_voted_users + title_year + aspect_ratio, train,
+             family=binomial(link="logit"))
+pred_if = predict(logfit, test, type = 'response') >= 0.5
+print(paste('Correct prediction rate is', 1 / test_num * sum(pred_if == test$if_profit)))
+```
+
+# Summary
+## Conclusions?
+- Which variables are important?
+- Which model to choose?
+- Practical significance?
+- What to do next?

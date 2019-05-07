@@ -1,5 +1,5 @@
 # IMDB Data Analysis
-This is the final project for the course Advanced Applied Statistics. In this project, we focus on analyzing the IMDB dataset, which includes crucial information about over $3600$ movies. We set the following $3$ goals:
+This is the final project for the course Advanced Applied Statistics. In this project, we focus on analyzing the IMDB dataset, which includes crucial information about over 3600 movies. We set the following 3 goals:
 
 - Obtain a comprehensive knowledge of the dataset.
 - Build a model to predict the IMDB score of a movie based on several variables.
@@ -14,4 +14,4 @@ To achieve the goals above, we first do thorough explaratory data analysis, then
 - Shiny: the code for building RShiny (coming soon)
 - Slides: the slides for presentation
 
-I sincerely wish that you enjoy my work. 
+I sincerely wish that you enjoy my work.

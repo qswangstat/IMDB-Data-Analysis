@@ -1,14 +1,15 @@
 ---
 title: "IMDB Data Analysis"
-author: Qingsong Wang
-date: May 6th, 2019
-output: 
-   html_document:
-   df_print: paged
+author: "Qingsong Wang"
+date: "May 6th, 2019"
+output:
+  pdf_document: default
+  html_document: null
+  df_print: paged
 always_allow_html: yes
 ---
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE) 
+knitr::opts_chunk$set(echo = FALSE, fig.width = 8, fig.height = 6) 
 options(digits = 3)
 ```
 ```{r, include=FALSE}

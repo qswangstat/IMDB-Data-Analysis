@@ -1,32 +1,16 @@
 ---
 title: "IMDB Data Analysis"
 author: Qingsong Wang
-date: April 8th, 2019
+date: May 6th, 2019
 output: 
-  ioslides_presentation:
-    widescreen: true
+   html_document:
+   df_print: paged
+always_allow_html: yes
 ---
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, fig.width=6, fig.height=3) 
+knitr::opts_chunk$set(echo = FALSE) 
 options(digits = 3)
 ```
-# Where Do We Start?
-
-## Background
-- **Movies**, also known as films, are a type of visual communication which uses moving pictures and sound to tell stories or teach people something. 
-- Movies are appealing a rapidly-increasing number of audience.
-- The questions that I'm interested in are listed delow:
-  * Which factors are of importance in making the movies popular, and how to predict the audience rating.
-  * How to determine whether the investment on a movie is profiable or not.
-  * How to build a recommender system for the movie audience.
-  * etc
-  
-## Data Description
-- The two datasets comes from [Kaggle](https://www.kaggle.com/), and we combine them.
-- The combined dataset contains nearly $5000$ movies, and after removing NA rows $3636$ pieces are left
-- The variables are listed on the next page
-
-## Data Description
 ```{r, include=FALSE}
 library(dplyr)
 library(readr)
@@ -46,40 +30,60 @@ library(ggcorrplot)
 library(randomForest)
 library(e1071)
 library(rpart)
+library(MASS)
+library(glmnet)
+library(PerformanceAnalytics)
+library(corrplot)
+library(factoextra)
+library(FactoMineR)
+library(car)
+library(kernlab)
+library(keras)
+library(xgboost)
+library(stringr)
+library(caret)
+library(car)
+library(Matrix)
+library(ROCR)
+library(pROC)
+library(pander)
+panderOptions('round', 2)
+```
+```{r, include=FALSE}
+setwd("../Data")
 movie = read_csv('movie.csv')
+movie = movie %>% filter(language == "English")
+dim(movie)
 ```
-```{r}
-colnames(movie)
-```
-## Data Description
-- We explain some variables here:
-  - aspect_ratio: the aspect ratio of a movie
-  - actor_x_name / actor_x_facbook_likes: name and facebook like number of the actor
-  - facenumber_in_poster: Contains number of actor¡¯s faces on a movie poster
-  - gross: the revenue of a movie in USD
-  - genres: the sub-genres to which a movie belongs
-  - imdb_score: the audience rating of a movie
-  - movie_title: title of a movie
-  - title_year: the year in which a film was released
+# 1. Introduction
+&nbsp;&nbsp;&nbsp;&nbsp;**Movies**, also known as films, are a type of visual communication which uses moving pictures and sound to tell stories or teach people something. Nowadays, movies are appealing a rapidly-increasing number of audience. There are abundant data resource, recording various kinds of features of thousands of movies. In this project, we aim at gaining comprehensive knowledge about movies, via analyzing related datasets. As listed below, three main goals are set here:
   
-## Data Description
-- Considering inflation, it's more reasonable to measure the revenue of a movie by a ratio, i.e. the return rate,
-$$
-\text{return_rate} = \frac{\text{gross} - \text{budget}}{\text{budget}}
-$$
-- We regard the **imdb_score** and **return_rate** as the response respectively and apply several machine learning techniques to predict. 
-- Whether a movie is profitable or not can also be treated as a $0-1$ classification problem, so classifiction tools can be helpful.
+- Have a deep understanding about the dataset.
+- Predict the IMDB score of a movie based on several variables.
+- Determine whether a movie is profitable, or in other words, worth investing.
 
-# What Do We Want?
+&nbsp;&nbsp;&nbsp;&nbsp;We want to achieve our goals by thorough explanatory data analysis as well as building popular machine learning models to predict or classify. Such models include support vector machine, random forest, neural network and etc. As a data analysis report, we try to show to the audience as many vivid results as possible, so the main focus lies on the the EDA part, while we still spend enough time on modelling.
 
-## Goal of Our Analysis
-There are mainly three goals as listed below.
+&nbsp;&nbsp;&nbsp;&nbsp;The report is organized as follows: section 1 is a brief introduction; section 2 contains data description and pre-processing; we begin our explanatory analysis in section 3, where the most visualization results are shown; different models for prediction and classification are introduced and trained in section 4 with parameters tuned properly; we close this report with summary and discussion in section 5. 
 
-- Obtain a comprehensive knowledge of the dataset.
-- Build a model to predict the IMDB score of a movie based on several variables.
-- Build a model to determine whether a movie is profitable, or in other words, worth investing.
+# 2. Data Description
+&nbsp;&nbsp;&nbsp;&nbsp;After comparison, we decide to collect two datasets from [Kaggle](https://www.kaggle.com/), and combine them. The reason why we choose these two is that they are complete and contain more intereting features. The combined dataset contains nearly $5000$ movies as well as $30$ features, and after removing NA rows $3636$ pieces are left. The meanings of some variable are listed below, while the left are intuitive.
 
-# How Do We Begin? 
+|Variable|Description|
+|---|---|
+|aspect_ratio|ratio of length to width of screen|
+|budget|the budget of the movie in USD|
+|color|logical, whether is colorful or black-white|
+|facenum_in_posters|number of faces in the poster|
+|genres|movie type e.g. thriller, drama, etc|
+|gross|the revenue of movies in USD|
+|imdb_score| the audience rating|
+|runtime|the duration of movies|
+
+&nbsp;&nbsp;&nbsp;&nbsp;For simplicity, from now on we only analyze $3494$ movies in English, to remove the influence of language. And we add two columns, one named **if_profit**, which is a logical value indicating whether a movie is profitable, the other named **return_rate**, i.e. the ratio of net revenue to budget. Notice **return_rate** is more reasonable to measure the revenue, considering inflation. Then we can begin our formal analysis.
+
+
+# 3. Explanatory Data Analysis
 ```{r, include=FALSE}
 f1 = list(
   family = "Old Standard TT, serif",
@@ -105,7 +109,6 @@ m = list(
   t = 100,
   pad = 4
 )
-
 # annotations for subplot
 a1 = list(x = 0.5, y = 1.0,
            showarrow = FALSE, 
@@ -124,35 +127,6 @@ b1 = list(x = 0.5, y = 1.0,
            yanchor = "bottom", 
            yref = "paper",
            font = f1)
-
-
-# creating a function called scatter_plot for
-# plotting scatter plots using ggplot and plotly
-
-scatter_plot = function(x, y, xlabel, ylabel, title,
-                         text1, text2, text3,
-                         alpha = NULL){
-  if(is.null(alpha)) alpha = 0.4
-  gp = ggplot(data = movie, mapping = aes(x = x, y = y,
-                                           text = paste(text1, x,
-                                                        text2, y,
-                                                        text3, movie_title)))
-  plot = gp + geom_point(position = "jitter", 
-                          show.legend = F, shape = 21, 
-                          stroke = .2, alpha = alpha) + 
-    xlab(xlabel) +
-    ylab(ylabel) +
-    ggtitle(title) +
-    theme_minimal() +
-    theme(legend.position = "none",
-          plot.title = element_text(size = 12, face = "bold", 
-                                    family = "Times", 
-                                    color = "darkgrey")) 
-  
-  ggplotly(plot, tooltip = "text") %>%
-    layout(m, xaxis = a, yaxis = a)
-}
-
 # creating function for plotting scatter plot using facet wrap
 facet_plot = function(x, y, xlabel, ylabel, alpha = NULL){
   if(is.null(alpha)) alpha = 1
@@ -219,36 +193,6 @@ budg_gross_hist = function(x){
   ggplotly() %>% 
     layout(m, xaxis = a, yaxis = a) 
 }
-
-
-# creating a function for ploting bar graphs
-bar_plot = function(data, x, y, info, xlabl, ylabl, title, 
-                     deci = NULL, suf = NULL){
-  if(is.null(suf)) suf = ""
-  if(is.null(deci)) deci = 0
-  b1 = ggplot(data, aes(x = reorder(genres, x), 
-                         y = y, 
-                         text = paste("Genre:", genres,
-                                      info, 
-                                      round(y, deci), suf)))
-  
-  b1 + geom_bar(aes(fill = genres), stat = "identity", 
-                show.legend = F, color = "black", size = 0.2,
-                width = 0.7, alpha = 0.7) +
-    xlab(xlabl) +
-    ylab(ylabl) +
-    ggtitle(title) +
-    theme_minimal() +
-    theme(legend.position = "none",
-          plot.title = element_text(size = 14, 
-                                    color = "grey", family = "Times")) +
-    scale_fill_brewer(palette = "Spectral")
-  
-  ggplotly(tooltip = "text") %>%
-    layout(margin = m, xaxis = a, yaxis = a)
-}
-
-
 # creating a function for plotting plotly line graph for title_year
 line_graph = function(data, y, name){
   
@@ -268,11 +212,30 @@ line_graph = function(data, y, name){
            margin = m)
   scat_p1
 }
-colors = c(brewer.pal(n = 11, name = "Spectral"))
 ```
-
-## Exploratory Data Analysis 
-- Display the proportion of movies making profit or loss. 
+&nbsp;&nbsp;&nbsp;&nbsp;First, we want to check which genres most movies belong to. It's easy to find that comedy and action movies rank the first two with share $26.8\%, 26\%$ respectively.
+```{r}
+colors = c(brewer.pal(n = 11, name = "Spectral"))
+# Plotting a donut chart by chaining commands together 
+movie %>%
+  group_by(genres) %>%
+  summarise(count = n()) %>% 
+  arrange(desc(count)) %>%
+  head(10) %>%
+  plot_ly(labels = ~genres, values = ~count,
+          insidetextfont = list(color = 'Black'),
+          marker = list(colors = colors, 
+                        line = list(color = 'Black', width = .5)), 
+          opacity = 0.8) %>%
+  add_pie(hole = 0.6) %>%
+  layout(title = "Genre wise share of movies for top 10 genres", 
+         titlefont = list(family = "Times", size = 20, color = "grey"),
+         xaxis = list(showgrid = T, zeroline = F, showticklabels = F),
+         yaxis = list(showgrid = T, zeroline = F, showticklabels = F),
+         showlegend = T, 
+         margin = list(t = 50, b = 50))
+```
+&nbsp;&nbsp;&nbsp;&nbsp;Then we show the proportion of movies making profit or loss. The number of profitable movies is a bit larger, but we can still say that the dataset is balanced. This will not cause difficulty in classification.
 ```{r}
 movie %>%
   group_by(if_profit) %>%
@@ -290,20 +253,14 @@ movie %>%
          showlegend = F, 
          margin = list(t = 50, b = 50))
 ```
-- The number of profitable movies is a bit larger, but we can still say that the dataset is balanced.
-
-## Exploratory Data Analysis
-- Check the distribution of **imdb_score**.
+&nbsp;&nbsp;&nbsp;&nbsp;Next we're going to check the distribution of several important continuous variables. The first one is **imdb_score**. The plot shows that there exists right-skewness in the distribution of the IMDB score, most of which lie around $6.7$. We might take $\log$ or Box-Cox transformation to handle this problem.
 ```{r}
 hist_plot(movie$imdb_score, bwidth = 0.1, 
           "IMDB Score", 
           fill = sample(brewer.pal(11, "Spectral"), 1),
           color = "black") 
 ```
-- There exists right-skewness in the distribution of the IMDB score, most of which lie around $6.7$. We might take $\log$ transformation to handle this problem.
-
-## Exploratory Data Analysis
-- Check the distribution of **budget** and **gross**, with the values outside their respective inter quartile ranges removed.
+&nbsp;&nbsp;&nbsp;&nbsp;The following is the distribution of **budget** and **gross**, with the values outside their respective inter quartile ranges removed. Similar to **imdb_score**, right-skewness exist and proper transformation may still help.
 ```{r}
 options(scipen = 999)  
 # transformed budget histograms
@@ -316,10 +273,7 @@ p2 = budg_gross_hist(movie$gross) %>%
 
 subplot(p1, p2, widths = c(0.5, 0.5))
 ```
-- Similar to **imdb_score**, right-skewness exist and $\log$ transformation may still help.
-
-## Exploratory Data Analysis
-- Check if profitable movies recieve more appreciation by the users. Note that $1$ represents profitable movies and $0$ the others. 
+&nbsp;&nbsp;&nbsp;&nbsp;We then check if profitable movies recieve more appreciation by the users. Note that $1$ represents profitable movies and $0$ the others. Obviously, profitable movies gain higher IMDB score in general. A t-test provides more evidence.
 ```{r}
 prof_loss = movie %>%
   ggplot(aes(x = imdb_score, color = factor(if_profit))) +
@@ -338,10 +292,7 @@ ggplotly(prof_loss) %>%
                        x = 0,
                        y = -0.1))
 ```
-- Obviously, profitable movies gain higher IMDB score in general. A t-test provides more evidence but we're not going to show here.
-
-## Exploratory Data Analysis
-- Out of curiosity, we want to check if **imdb_score** is related to **release year**.
+&nbsp;&nbsp;&nbsp;&nbsp;Out of curiosity, we want to check if **imdb_score** is related to **release year**. We set year 2000 as a boundary and find that there's almost no difference in the distribution of **imdb_score** before and after that year.
 ```{r}
 movie$before_n_after_2000 = ifelse(movie$title_year >= 2000, 1, 0)
 
@@ -372,90 +323,365 @@ ggplotly(his) %>%
                        x = 0,
                        y = -0.1)) 
 ```
-- We set year 2000 as a boundary and find that there's almost no difference in the distribution of **imdb_score** before and after that year.
-
-## Exploratory Data Analysis
-- Check the correlation between several variables
+&nbsp;&nbsp;&nbsp;&nbsp;Trend along time is also an interesting point. The following plot shows that audience ratings are decreasing with time, but for user votes or reviews, no such trends occur. However, it's apparent that votes and reviews are peaking where the ratings are higher and vice versa. 
 ```{r}
-ggpairs(movie %>% 
-                   select(imdb_score, total_fb_likes, gross, num_voted_users))
+# creating a data frame for average score, avg votes and, avg user reviews
+# by title year
+scat_year_score = movie %>%
+  group_by(title_year) %>%
+  summarise(count = n(),
+            IMDB_Score = round(mean(imdb_score),1),
+            avg_votes = mean(num_voted_users),
+            avg_user_review = round(mean(num_user_for_reviews)))
+
+# plotting line graph for Avg score by title year 
+lp1 = line_graph(scat_year_score, 
+                  scat_year_score$IMDB_Score, 
+                  "Average Score")
+# plotting line graph for Avg votes by title year
+lp2 = line_graph(scat_year_score, 
+                  scat_year_score$avg_votes, 
+                  "Average Votes")
+# plotting line graph for Avg reviews by title year
+lp3 = line_graph(scat_year_score,
+                  scat_year_score$avg_user_review,
+                  "Average User Review") 
+
+
+subplot(lp1, lp2, lp3, nrows = 3, heights = c(0.33, 0.33, 0.33))
+
 ```
-- This step helps us pick up the most significant variables, which can be used in regression analysis.
-
-## Exploratory Data Analysis
-
-
-# Which Models Can Help?
-
-## Split the Dataset
-Notice that if we try to decide whether to invest a movie or not, some variables cannot be obtained in advance, such as **num_user_for_reviews**, **num_voted_users**, etc. Besides, some text varaibles have no contribution. So, we simply drop them in our analysis.
+&nbsp;&nbsp;&nbsp;&nbsp;We also check the trend of budget and gross. Evidenlty both budget and gross trends are rising with time. This meant that the costs of producing movies have steadily increased over the years and so have the revenue. The reason why the outlier appears is that there is one movie, of which the gross is not measured in USD.
 ```{r}
-idx = c('actor_1_facebook_likes', 'actor_2_facebook_likes', 'actor_3_facebook_likes',
-        'director_facebook_likes', 'cast_total_facebook_likes', 'aspect_ratio', 'budget',
-        'color', 'facenumber_in_poster', 'imdb_score', 'runtime', 'return_rate', 'if_profit')
-movie = movie[, idx]
-movie[, 'color'] = as.factor(as.data.frame(movie[, 'color']))
+year_budg = movie %>%
+  group_by(title_year) %>%
+  summarise(avg_budget = round(mean(budget), 2),
+            avg_gross = round(mean(gross), 2))
+  
+p = plot_ly(year_budg, x = ~title_year, y = ~avg_budget, 
+             name = 'Average Budget', type = 'scatter', mode = 'lines',
+             line = list(color = sample(brewer.pal(11, "Spectral"), 1))) %>%
+  add_trace(y = ~avg_gross, name = 'Average Gross', mode = 'lines',
+            line = list(color = sample(brewer.pal(11, "Spectral"), 1))) %>%
+  layout(margin = m, 
+         xaxis = list(title = "Title Year"),
+         yaxis = list(title = "Avg Budget/Avg Gross in MM"),
+         title = "Line Graph for Average Budget vs Average Gross", 
+         font = list(family = "Serif", color = "grey"),
+         legend = list(orientation = "h", size = 6,
+                       bgcolor = "#E2E2E2",
+                       bordercolor = "darkgrey",
+                       borderwidth = 1)) 
+p
 ```
-As usual, we first split the dataset into training set and testing set.
-```{r, echo = TRUE}
-train_num = ceiling(0.8 * nrow(movie))
-test_num = nrow(movie) - train_num
-train_id = sample(1:nrow(movie), train_num)
-train = movie[train_id, ]
-test = movie[-train_id, ]
+&nbsp;&nbsp;&nbsp;&nbsp;Then, we check the correlation between several variables. This step inspires us to select the most significant variables.
+```{r, include=FALSE}
+setwd("../Data")
+movie = read_csv('movie.csv')
+movie = movie %>% filter(language == "English")
+movie$genres = factor(movie$genres)
+movie$color = factor(movie$color)
+movie$content_rating = factor(movie$content_rating)
+movie$language = factor(movie$language)
+idx = c("movie_title", "overview", "plot_keywords", "popularity", "gross",
+        "production_companies", "title_year", "content_rating", "country",
+        "language", "movie_facebook_likes", "total_fb_likes")
+movie_simp = movie %>% 
+  mutate(title_length = unlist(lapply(str_split(movie_title," "), length))) %>%
+  mutate(kw_length = unlist(lapply(str_split(plot_keywords,"|"), length))) %>%
+  dplyr::select(-ends_with("_name")) %>%
+  dplyr::select(-starts_with("num_")) %>%
+  filter(language == "English") %>%
+  dplyr::select(-idx)
 ```
-
-
-## Linear Regression
 ```{r}
-lfit = lm(imdb_score ~ ., train[,1:12])
+corrplot(cor(movie_simp %>% dplyr::select(-color, -genres)), tl.cex = 0.5, method = "ellipse")
+```
+&nbsp;&nbsp;&nbsp;&nbsp;Last but not least, we apply PCA to the continuous variables to see the effect of dimension reduction. But unfortunately, the proportion of variance doesn't concentrate on the first two or three components, so PCA is not very helpful here.
+```{r}
+pca_res = PCA(movie_simp %>% dplyr::select(-imdb_score, -if_profit, -return_rate, -color, -genres),
+              graph = FALSE)
+fviz_eig(pca_res, addlabels = TRUE, ylim = c(0, 50))
+var = get_pca_var(pca_res)
+corrplot(var$cos2, is.corr=FALSE, method = "ellipse")
+fviz_pca_var(pca_res, col.var = "contrib",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07")
+)
+```
+&nbsp;&nbsp;&nbsp;&nbsp;We have to say EDA requires lots of efforts and energy. What we do in this report is a tip of the iceberg. But due to the limitation of time and space, we only show what we think is the most crucial and interesting part. Now we have a better understanding of the movie dataset, and we will turn to the modelling part.
+
+# 4. Model
+## 4.1 Review
+&nbsp;&nbsp;&nbsp;&nbsp;Since most machine learning models we use later are quite popular and familiar to the audience, we only review one relatively advanced model -- Xgboost.
+
+&nbsp;&nbsp;&nbsp;&nbsp;Xgboost, also known as eXtreme Gradient Boosting, is a powerful model in both prediction and classification. Xgboost is actually the ensemble of many CART regression tree. The objective function is 
+$$
+\begin{aligned}
+\mathcal{L}(\phi)=\sum_{i} l\left(\hat{y}_{i}, y_{i}\right)+\sum_{k} \Omega\left(f_{k}\right)\\
+\text{where } \Omega(f)=\gamma T+\frac{1}{2} \lambda\|w\|^{2},
+\end{aligned}
+$$
+where $T$ is the number of leaf nodes and $w$ is the weight. By second-order Taylor's expansion,
+$$
+\mathcal{L}^{(t)} \simeq \sum_{i=1}^{n}\left[l\left(y_{i}, \hat{y}^{(t-1)}\right)+g_{i} f_{t}\left(\mathbf{x}_{i}\right)+\frac{1}{2} h_{i} f_{t}^{2}\left(\mathrm{x}_{i}\right)\right]+\Omega\left(f_{t}\right),
+$$
+where $g_{i}=\partial_{\hat{y}^{(t-1)}} l\left(y_{i}, \hat{y}^{(t-1)}\right)$ and $h_{i}=\partial_{\hat{y}^{(t-1)}}^{2} l\left(y_{i}, \hat{y}^{(t-1)}\right)$. Now it's easy to solve the problem as follows.
+$$
+\mathcal{L}_{s p l i t}=\frac{1}{2}\left[\frac{\left(\sum_{i \in I_{L}} g_{i}\right)^{2}}{\sum_{i \in I_{L}} h_{i}+\lambda}+\frac{\left(\sum_{i \in I_{R}} g_{i}\right)^{2}}{\sum_{i \in I_{R}} h_{i}+\lambda}-\frac{\left(\sum_{i \in I} g_{i}\right)^{2}}{\sum_{i \in I} h_{i}+\lambda}\right]-\gamma.
+$$
+&nbsp;&nbsp;&nbsp;&nbsp;We will apply Xgboost to our classification model.
+
+## 4.2 Predict IMDB score
+&nbsp;&nbsp;&nbsp;&nbsp;As usual, we split the dataset into training and testing set with ratio $0.8$. Notice that if we try to decide whether to invest a movie or not, some variables cannot be obtained in advance, such as **num_user_for_reviews**, **num_voted_users**, etc. Some text varaibles should be transformed into factor type, while some hardly have contribution, hence need dropping. Besides, we add two features: **title_length** is the number of words in title and **kw_length** is the number of keywords in poster.
+```{r}
+### split the dataset
+set.seed(123)
+train_num = ceiling(0.8 * nrow(movie_simp))
+test_num = nrow(movie_simp) - train_num
+train_id = sample(1:nrow(movie_simp), train_num)
+train = movie_simp[train_id, ]
+test = movie_simp[-train_id, ]
+```
+
+### 4.2.1 Linear Regression
+&nbsp;&nbsp;&nbsp;&nbsp;We first fit a simple multiple linear regression to obtain some insights. We find several significant variables including **runtime**, **facenum_in_posters**, etc. But surprisingly and strangely, variables related to facebook likes of actors and **budget** have little with prediction.
+```{r}
+view_model = function(model) {
+  par(mfrow=c(2,2)) # Change the panel layout to 2 x 2
+  plot(model)
+  par(mfrow=c(1,1)) # Change back to 1 x 1
+}
+train_data = train %>% dplyr::select(-return_rate, -if_profit)
+lfit = lm(imdb_score ~ ., train_data)
+sum = summary(lfit)
+print(paste("Significant variables include:", 
+            Reduce('paste', rownames(sum$coefficients)[sum$coefficients[,4] < 0.001])))
+view_model(lfit)
 pred_score = predict(lfit, test)
-print(paste('For IMDB score, RMSE is', 1 / test_num * sqrt(sum((pred_score - test$imdb_score)^2))))
-lfit2 = lm(return_rate ~ budget + runtime + total_fb_likes + facenumber_in_poster + 
-            num_critic_for_reviews + num_user_for_reviews + num_voted_users + aspect_ratio, train)
-pred_rate = predict(lfit2, test)
-print(paste('For return rate, RMSE is', 1 / test_num * sqrt(sum((pred_rate - test$return_rate)^2))))
+print(paste("Linear Regression: RMSE =", sqrt(1 / test_num * sum((pred_score - test$imdb_score)^2))))
 ```
-## Linear Regression
+&nbsp;&nbsp;&nbsp;&nbsp;The RMSE is quite satisfying. However, it's easy to find that the QQ-plot is far away from normal case, so next we apply Box-Cox transformation to handle this problem. We can see that such transformation is quite powerful, although accuracy is lost a bit.
 ```{r}
-summary(lfit)
+### box-cox transformation
+lambda_seq = seq(-5,5,0.05)
+bc = boxcox(lfit, lambda_seq)
+lam = lambda_seq[which.max(bc$y)]
+lfit_bc = lm((imdb_score^lam - 1)/lam ~ ., train_data)
+sum = summary(lfit_bc)
+print(paste("Significant variables include:", 
+            Reduce('paste', rownames(sum$coefficients)[sum$coefficients[,4] < 0.001])))
+view_model(lfit_bc)
+pred_score = predict(lfit_bc, test)
+print(paste("Linear Regression with Box-Cox: RMSE =", sqrt(1 / test_num * sum(((pred_score*lam+1)^(1/lam) - test$imdb_score)^2))))
 ```
-## Support Vector Machine
+&nbsp;&nbsp;&nbsp;&nbsp; We also want to screen really important variables, so variable selection techniques are also applied, the following shows the result of Lasso. Notice we use cross-validation to pick the optimal hyper-parameters. In this case, facebook likes of actors are picked up.
 ```{r}
-svmfit = svm(imdb_score ~ budget + runtime + total_fb_likes + facenumber_in_poster + 
-               num_critic_for_reviews + num_user_for_reviews + num_voted_users + title_year + aspect_ratio, train)
+grid = 10^seq(-5, 5, 0.05)
+xfactor = model.matrix(imdb_score ~ color + genres, train_data)[, -1]
+design = as.matrix(data.frame(train_data %>% dplyr::select(-imdb_score, -color, -genres), 
+                              xfactor))
+lsfit = glmnet(design, train_data$imdb_score, alpha = 1, lambda = grid)
+plot(lsfit)
+lscv = cv.glmnet(design, train_data$imdb_score, alpha = 1, lambda = grid, nfolds = 10)
+plot(lscv)
+lam_opt = lscv$lambda.min
+
+xfactor2 = model.matrix(imdb_score ~ color + genres, test)[, -1]
+design2 = as.matrix(data.frame(test %>% dplyr::select(-imdb_score, -color, -genres, -return_rate, -if_profit), 
+                              xfactor2))
+coef = coef(lsfit, s = lscv$lambda.min)
+act_idx = which(coef != 0)
+print(paste("Significant variables include:", Reduce('paste', row.names(coef)[act_idx])))
+pred_score = predict(lsfit, s = lam_opt, newx = design2)
+cat("\n")
+print(paste("LASSO: RMSE =", sqrt(1 / test_num * sum((pred_score - test$imdb_score)^2))))
+```
+
+### 4.2.2 SVM & Random Forest
+Obviouly, the prediction accuracy on the testing set is improved, especially for random forest. Also, rank of variable importance is shown in the plot below.
+```{r}
+### SVM
+svmfit = ksvm(imdb_score ~ ., train_data, kernel = "rbfdot",                    
+                  kpar = list(sigma = 0.05), C = 5,                    
+                  prob.model = TRUE, cross = 10) 
 pred_score = predict(svmfit, test)
-print(paste('For IMDB score, RMSE is', 1 / test_num * sqrt(sum((pred_score - test$imdb_score)^2))))
-svmfit = svm(return_rate ~ budget + runtime + total_fb_likes + facenumber_in_poster + 
-            num_critic_for_reviews + num_user_for_reviews + num_voted_users + aspect_ratio, train)
-pred_rate = predict(svmfit, test)
-print(paste('For return rate, RMSE is', 1 / test_num * sqrt(sum((pred_rate - test$return_rate)^2))))
-```
-
-## Random Forest
-```{r}
-rffit = randomForest(imdb_score ~ budget + runtime + total_fb_likes + facenumber_in_poster + 
-               num_critic_for_reviews + num_user_for_reviews + num_voted_users + title_year, train)
+print(paste("SVM: RMSE =", sqrt(1 / test_num * sum((pred_score - test$imdb_score)^2))))
+### Random Forest
+rffit = randomForest(imdb_score ~ ., train_data, ntree=80,
+                     importance=TRUE, proximity=TRUE, na.action = na.omit, 
+                     norm.votes=TRUE)
 pred_score = predict(rffit, test)
-print(paste('For IMDB score, RMSE is', 1 / test_num * sqrt(sum((pred_score - test$imdb_score)^2))))
-rffit = randomForest(return_rate ~ budget + runtime + total_fb_likes + facenumber_in_poster + 
-            num_critic_for_reviews + num_user_for_reviews + num_voted_users, train)
-pred_rate = predict(rffit, test)
-print(paste('For return rate, RMSE is', 1 / test_num * sqrt(sum((pred_rate - test$return_rate)^2))))
+print(paste("Random Forest: RMSE =", sqrt(1 / test_num * sum((pred_score - test$imdb_score)^2))))
+varImpPlot(rffit, cex = 0.6)
 ```
 
-## Logistic Regression
+### 4.2.3 Deep Learning
+After building the common machine learning, we now turn to the deep learning techniques. Now keras has already been integrated into R package, thus very convenient to construct a network. Next we train the network and report the results. The common sense is that neural network should be more powerful, but the following results shows the opposite. The accuracy is not improved. We think the reason is due to the overfitting and the lack of variables. 
 ```{r}
-logfit = glm(if_profit ~ budget + runtime + total_fb_likes + facenumber_in_poster + 
-               num_critic_for_reviews + num_user_for_reviews + num_voted_users + title_year + aspect_ratio, train,
+### Deep Learning
+train_dl = scale(train_data %>% dplyr::select(-color, -genres, -imdb_score))
+test_dl = test %>% dplyr::select(-imdb_score, -color, -genres, -return_rate, -if_profit)
+# Use means and standard deviations from training set to normalize test set
+col_means_train = attr(train_dl, "scaled:center") 
+col_stddevs_train = attr(train_dl, "scaled:scale")
+test_dl = scale(test_dl, center = col_means_train, scale = col_stddevs_train)
+build_model = function() {
+  
+  model = keras_model_sequential() %>%
+    layer_dense(units = 32, activation = "relu",
+                input_shape = dim(train_dl)[2]) %>%
+    layer_dense(units = 64, activation = "relu") %>%
+    layer_dense(units = 1)
+  
+  model %>% compile(
+    loss = "mse",
+    optimizer = optimizer_adam(),
+    metrics = list("mean_absolute_error")
+  )
+  model
+}
+
+model = build_model()
+model %>% summary()
+print_dot_callback = callback_lambda(
+  on_epoch_end = function(epoch, logs) {
+    if (epoch %% 100 == 0) cat("\n")
+    cat(".")
+  }
+)    
+epochs = 500
+early_stop = callback_early_stopping(monitor = "val_loss", patience = 50)
+
+history = model %>% fit(
+  train_dl,
+  train$imdb_score,
+  batch_size = 100,
+  epochs = epochs,
+  validation_split = 0.2,
+  verbose = 0,
+  callbacks = list(early_stop, print_dot_callback)
+)
+
+plot(history, metrics = "mean_absolute_error", smooth = FALSE)
+pred_score = model %>% predict(test_dl)
+print(paste("Deep Learning: RMSE =", sqrt(1 / test_num * sum((pred_score[, 1] - test$imdb_score)^2))))
+```
+## 4.3 Classify Profitable Movie
+Since this section is imilar to what we do in section 4.2, we just show our results and omit more detailed interpretation. 
+```{r}
+### Logistic Regression
+train_data = train %>% dplyr::select(-imdb_score, -return_rate)
+logfit = glm(as.factor(if_profit) ~ ., train_data,
              family=binomial(link="logit"))
 pred_if = predict(logfit, test, type = 'response') >= 0.5
-print(paste('Correct prediction rate is', 1 / test_num * sum(pred_if == test$if_profit)))
+print(paste("Logistic Regression: Rate =", 1 / test_num * sum(pred_if == test$if_profit)))
+roc3 = roc(test$if_profit, as.numeric(pred_if))
+
+### Random Forest
+rffit = randomForest(as.factor(if_profit) ~ ., train_data, ntree = 100, 
+                     importance=TRUE, proximity=TRUE, na.action = na.omit, 
+                     norm.votes=TRUE)
+pred_if = predict(rffit, test)
+print(paste("Random Forest: RMSE =", 1 / test_num * sum(pred_if == test$if_profit)))
+varImpPlot(rffit, cex = 0.6)
+roc4 = roc(test$if_profit, as.numeric(pred_if))
+
+### Xgboost
+traindata1 = data.matrix(train_data %>% dplyr::select(-if_profit)) 
+traindata2 = Matrix(traindata1, sparse = T)
+traindata3 = data.matrix(train_data$if_profit) 
+traindata4 = list(data = traindata2, label = traindata3) 
+dtrain = xgb.DMatrix(data = traindata4$data, label = traindata4$label)
+
+test_data = test %>% dplyr::select(-imdb_score, -return_rate)
+testdata1 = data.matrix(test_data %>% dplyr::select(-if_profit)) 
+testdata2 = Matrix(testdata1, sparse = T) 
+testdata3 = data.matrix(test_data$if_profit)
+testdata4 = list(data = testdata2, label = testdata3) 
+dtest = xgb.DMatrix(data = testdata4$data, label = testdata4$label) 
+
+param = list(max_depth = 6, eta = 0.01, objective='binary:logistic')
+xgbfit = xgb.train(params = param, data = dtrain, nrounds = 200)
+pred_if = predict(xgbfit, dtest) >= 0.5
+print(paste("Xgboost: RMSE =", 1 / test_num * sum(pred_if == test$if_profit)))
+
+roc5 = roc(test_data$if_profit, as.numeric(pred_if))
+
+
+names = dimnames(data.matrix(train_data %>% dplyr::select(-if_profit)))[[2]]
+importance_matrix = xgb.importance(names, model = xgbfit)
+xgb.plot.importance(importance_matrix[1:10,])
+
+### Deep Learning
+train_dl = scale(train_data %>% dplyr::select(-color, -genres, -if_profit))
+test_dl = test %>% dplyr::select(-imdb_score, -color, -genres, -return_rate, -if_profit)
+# Use means and standard deviations from training set to normalize test set
+col_means_train = attr(train_dl, "scaled:center") 
+col_stddevs_train = attr(train_dl, "scaled:scale")
+test_dl = scale(test_dl, center = col_means_train, scale = col_stddevs_train)
+build_model = function() {
+  
+  model = keras_model_sequential() %>%
+    layer_dense(units = 32, activation = "relu",
+                input_shape = dim(train_dl)[2]) %>%
+    layer_dense(units = 32, activation = "sigmoid") %>%
+    layer_dense(units = 1)
+  
+  model %>% compile(
+    loss = "mse",
+    optimizer = optimizer_adam(),
+    metrics = list("accuracy")
+  )
+  model
+}
+
+model = build_model()
+model %>% summary()
+print_dot_callback = callback_lambda(
+  on_epoch_end = function(epoch, logs) {
+    if (epoch %% 100 == 0) cat("\n")
+    cat(".")
+  }
+)    
+epochs = 500
+early_stop = callback_early_stopping(monitor = "val_loss", patience = 50)
+
+history = model %>% fit(
+  train_dl,
+  train$if_profit,
+  batch_size = 100,
+  epochs = epochs,
+  validation_split = 0.2,
+  verbose = 0,
+  callbacks = list(early_stop, print_dot_callback)
+)
+
+plot(history, smooth = FALSE)
+pred_if = model %>% predict(test_dl) >= 0.5
+print(paste("Deep Learning: RMSE =", 1 / test_num * sum(pred_if == test$if_profit)))
+roc1 = roc(test$if_profit, as.numeric(pred_if))
+par(mfrow = c(2,2))
+plot(roc3, print.auc=TRUE, auc.polygon=TRUE, grid=c(0.1, 0.2),
+     grid.col=c("green", "red"), max.auc.polygon=TRUE,
+     auc.polygon.col="skyblue", print.thres=TRUE, main = "Logistic Regression")
+plot(roc5, print.auc=TRUE, auc.polygon=TRUE, grid=c(0.1, 0.2),
+     grid.col=c("green", "red"), max.auc.polygon=TRUE,
+     auc.polygon.col="skyblue", print.thres=TRUE, main = "Xgboost")
+plot(roc4, print.auc=TRUE, auc.polygon=TRUE, grid=c(0.1, 0.2),
+     grid.col=c("green", "red"), max.auc.polygon=TRUE,
+     auc.polygon.col="skyblue", print.thres=TRUE, main = "Random Forest")
+plot(roc1, print.auc=TRUE, auc.polygon=TRUE, grid=c(0.1, 0.2),
+     grid.col=c("green", "red"), max.auc.polygon=TRUE,
+     auc.polygon.col="skyblue", print.thres=TRUE, main = "Deep Learning")
 ```
 
-# Summary
-## Conclusions?
-- Which variables are important?
-- Which model to choose?
-- Practical significance?
-- What to do next?
+# 5. Discussion
+We have a deeper understanding of the movie dataset. By detailed analysis, we build satisfying prediction systems with RMSE around $0.9$, as well as mundane classification systems with accuracy $0.6$. The variables we collected are still not enough for better results. After all, it's a hard job to predict score or determine whether profitable before a movie runs to the audience. In fact, if we do not drop the ad-hoc varaibles, both results improve very significantly. But if we still follow the rule of real world, we need to collect more features, such as social media information, network of actors, etc. These can be extensions of this report.
+
+
+
+
+
+
+
+

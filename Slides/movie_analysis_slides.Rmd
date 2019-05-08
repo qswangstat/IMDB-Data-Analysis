@@ -300,7 +300,7 @@ hist_plot(movie$imdb_score, bwidth = 0.1,
           fill = sample(brewer.pal(11, "Spectral"), 1),
           color = "black") 
 ```
-- There exists right-skewness in the distribution of the IMDB score, most of which lie around $6.7$. We might take $\log$ transformation to handle this problem.
+- There exists right-skewness in the distribution of the IMDB score, most of which lie around $6.7$. We might take $\log$ or Box-Cox transformation to handle this problem.
 
 ## Exploratory Data Analysis
 - Check the distribution of **budget** and **gross**, with the values outside their respective inter quartile ranges removed.
@@ -388,13 +388,16 @@ ggpairs(movie %>%
 # Which Models Can Help?
 
 ## Split the Dataset
-Notice that if we try to decide whether to invest a movie or not, some variables cannot be obtained in advance, such as **num_user_for_reviews**, **num_voted_users**, etc. Besides, some text varaibles have no contribution. So, we simply drop them in our analysis.
+Notice that if we try to decide whether to invest a movie or not, some variables cannot be obtained in advance, such as **num_user_for_reviews**, **num_voted_users**, etc. Some text varaibles should be transformed into factor type, while some hardly have contribution, hence need dropping.  
 ```{r}
+movie$genres = factor(movie$genres)
+movie$color = factor(movie$color)
+movie$content_rating = factor(movie$content_rating)
 idx = c('actor_1_facebook_likes', 'actor_2_facebook_likes', 'actor_3_facebook_likes',
         'director_facebook_likes', 'cast_total_facebook_likes', 'aspect_ratio', 'budget',
-        'color', 'facenumber_in_poster', 'imdb_score', 'runtime', 'return_rate', 'if_profit')
+        'color', 'facenumber_in_poster', 'imdb_score', 'runtime', 'return_rate', 'if_profit', 
+        'total_fb_likes')
 movie = movie[, idx]
-movie[, 'color'] = as.factor(as.data.frame(movie[, 'color']))
 ```
 As usual, we first split the dataset into training set and testing set.
 ```{r, echo = TRUE}
@@ -406,7 +409,7 @@ test = movie[-train_id, ]
 ```
 
 
-## Linear Regression
+## Predict IMDB score
 ```{r}
 lfit = lm(imdb_score ~ ., train[,1:12])
 pred_score = predict(lfit, test)

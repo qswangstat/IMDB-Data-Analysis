@@ -190,7 +190,7 @@ plot(roc3, print.auc=TRUE, auc.polygon=TRUE, grid=c(0.1, 0.2),
      grid.col=c("green", "red"), max.auc.polygon=TRUE,
      auc.polygon.col="skyblue", print.thres=TRUE)
 ### Random Forest
-rffit = randomForest(as.factor(if_profit) ~ ., train_data, ntree = 60,
+rffit = randomForest(as.factor(if_profit) ~ ., train_data, ntree = 100, 
                      importance=TRUE, proximity=TRUE, na.action = na.omit, 
                      norm.votes=TRUE)
 pred_if = predict(rffit, test)
@@ -214,11 +214,10 @@ testdata3 = data.matrix(test_data$if_profit)
 testdata4 = list(data = testdata2, label = testdata3) 
 dtest = xgb.DMatrix(data = testdata4$data, label = testdata4$label) 
 
-param = list(max_depth = 6, eta = 0.03, objective='binary:logistic')
-xgbfit = xgb.train(params = param, data = dtrain, nrounds = 15)
+param = list(max_depth = 6, eta = 0.01, objective='binary:logistic')
+xgbfit = xgb.train(params = param, data = dtrain, nrounds = 200)
 pred_if = predict(xgbfit, dtest) >= 0.5
 print(paste("Xgboost: RMSE =", 1 / test_num * sum(pred_if == test$if_profit)))
-
 
 roc5 = roc(test_data$if_profit, as.numeric(pred_if))
 plot(roc5, print.auc=TRUE, auc.polygon=TRUE, grid=c(0.1, 0.2),
@@ -239,7 +238,7 @@ test_dl = scale(test_dl, center = col_means_train, scale = col_stddevs_train)
 build_model = function() {
   
   model = keras_model_sequential() %>%
-    layer_dense(units = 16, activation = "relu",
+    layer_dense(units = 32, activation = "relu",
                 input_shape = dim(train_dl)[2]) %>%
     layer_dense(units = 32, activation = "sigmoid") %>%
     layer_dense(units = 1)

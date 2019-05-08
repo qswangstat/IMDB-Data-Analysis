@@ -10,7 +10,7 @@ To achieve the goals above, we first do thorough explaratory data analysis, then
 - Code: all the code used in this project
 - Data: the main dataset is contained in "movie.csv".
 - Proposal: the project Proposal
-- Report: the final report (coming soon)
+- Report: the final report
 - Shiny: the code for building RShiny (coming soon)
 - Slides: the slides for presentation
 

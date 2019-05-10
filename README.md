@@ -7,11 +7,11 @@ This is the final project for the course Advanced Applied Statistics. In this pr
 
 To achieve the goals above, we first do thorough explaratory data analysis, then fit several powerful machine learning models such as linear regression, support vector machine, random forest, etc. The branch structure is listed below:
 
-- Code: all the code used in this project
+- Code: all the code used in this project.
 - Data: the main dataset is contained in "movie.csv".
-- Proposal: the project Proposal
-- Report: the final report
-- Shiny: the code for building RShiny (coming soon)
-- Slides: the slides for presentation
+- Proposal: the project Proposal.
+- Report: the final report.
+- Shiny: the code for building RShiny.
+- Slides: the slides for presentation.
 
 I sincerely wish that you enjoy my work.

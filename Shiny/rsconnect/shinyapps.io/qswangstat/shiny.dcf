@@ -1,0 +1,10 @@
+name: shiny
+title:
+username:
+account: qswangstat
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 922376
+bundleId: 2075477
+url: https://qswangstat.shinyapps.io/shiny/
+when: 1557503387.21295
